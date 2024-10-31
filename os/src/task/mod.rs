@@ -14,9 +14,13 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::{MAX_SYSCALL_NUM};
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
+use crate::timer::{
+    get_time_ms,
+};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -79,6 +83,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.syscall_begin = get_time_ms();
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -143,6 +148,13 @@ impl TaskManager {
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
+            
+            if inner.tasks[next].syscall_begin == 0 {
+                // 为0说明还未调用，现在是第一次调用
+                // 不为0，则已经用过这个task
+                inner.tasks[next].syscall_begin = get_time_ms();
+            }
+
             drop(inner);
             // before this, we should drop local variables that must be dropped manually
             unsafe {
@@ -152,6 +164,41 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    /// increase syscall times
+    fn increase_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].syscall_times[syscall_id] += 1;
+    }
+
+    /// get syscall times
+    fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_times.clone()
+    }
+
+    /// get time
+    fn get_syscall_begin(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        get_time_ms() - inner.tasks[current].syscall_begin
+    }
+
+    /// alloc mmap
+    fn alloc_mmap(&self, start: usize, len: usize, port: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.ms_alloc_mmap(start, len, port)
+    }
+
+    /// alloc munmap
+    fn alloc_unmmap(&self, start: usize, len: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.ms_alloc_unmmap(start, len)
     }
 }
 
@@ -186,6 +233,31 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// increase syscall times
+pub fn increase_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.increase_syscall_times(syscall_id);
+}
+
+/// get syscall times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_syscall_times()
+}
+
+/// get time
+pub fn get_syscall_begin() -> usize {
+    TASK_MANAGER.get_syscall_begin()
+}
+
+/// task_alloc_mmap
+pub fn task_alloc_mmap(start: usize, len: usize, port: usize) -> isize {
+    TASK_MANAGER.alloc_mmap(start, len, port)
+}
+
+/// task_alloc_unmmap
+pub fn task_alloc_unmmap(start: usize, len: usize) -> isize {
+    TASK_MANAGER.alloc_unmmap(start, len)
 }
 
 /// Get the current 'Running' task's token.

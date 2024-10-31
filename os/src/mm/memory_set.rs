@@ -262,6 +262,77 @@ impl MemorySet {
             false
         }
     }
+
+    /// alloc mmap
+    pub fn ms_alloc_mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
+        let va_start: VirtAddr = start.into();
+        if !va_start.aligned() {
+            return -1;
+        }
+        let mut vpn_start: VirtPageNum = va_start.floor();
+        let va_end: VirtAddr = (start + len).into();
+        let vpn_end: VirtPageNum = va_end.ceil();
+        let mut flags = PTEFlags::from_bits(port as u8).unwrap();
+        if port & 0b00000001 != 0 {
+            flags |= PTEFlags::R;
+        }
+        if port & 0b00000010 != 0 {
+            flags |= PTEFlags::W;
+        }
+        if port & 0b00000100 != 0 {
+            flags |= PTEFlags::X;
+        }
+        flags |= PTEFlags::U;
+        flags |= PTEFlags::V;
+
+        while vpn_start < vpn_end {
+            // 如果已被映射
+            if let Some(pte) = self.page_table.translate(vpn_start) {
+                if pte.is_valid() {
+                    // 找到对应的页表项，合法即为已被映射
+                    return -1;
+                }
+            }
+            // 未被映射
+            // 分配一块空间
+            if let Some(frame) = frame_alloc() {
+                // 得到fram
+                // 页表映射
+                self.page_table.map(vpn_start, frame.ppn, flags);
+            }else {
+                return -1;
+            }
+            vpn_start.step();
+        }
+        0
+    }
+
+    /// alloc unmmap
+    pub fn ms_alloc_unmmap(&mut self, start: usize, len: usize) -> isize {
+        let va_start: VirtAddr = start.into();
+        if !va_start.aligned() {
+            return -1;
+        }
+        let mut vpn_start: VirtPageNum = va_start.floor();
+        let va_end: VirtAddr = (start + len).into();
+        let vpn_end: VirtPageNum = va_end.ceil();
+
+        while vpn_start < vpn_end {
+            // 如果没被映射
+            if let Some(pte) = self.page_table.translate(vpn_start) {
+                if !pte.is_valid() {
+                    // 找不到对应的页表项，不合法即未被映射
+                    return -1;
+                }
+            }else {
+                // 为None直接 -1
+                return -1;
+            }
+            self.page_table.unmap(vpn_start);
+            vpn_start.step();
+        }
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

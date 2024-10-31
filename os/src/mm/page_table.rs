@@ -1,6 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum,PhysAddr};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -171,3 +171,22 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+
+/// get ptr pa
+pub fn translated_ptr_pa<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    // 根据token获取到应用地址空间页表
+    let page_table = PageTable::from_token(token);
+    // 将ptr指针转化成va
+    let va = VirtAddr::from(ptr as usize);
+    // 得到vpn和page_off
+    let page_off = va.page_offset();
+    let vpn = va.floor();
+    // 根据vpn获取ppn
+    let ppn = page_table.translate(vpn).unwrap().ppn();
+    // 通过ppn得到pa，加上page_off得到实际物理地址
+    let mut pa: PhysAddr = ppn.into();
+    pa.0 += page_off;
+    pa.get_mut()
+}
+
+
