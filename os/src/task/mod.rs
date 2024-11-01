@@ -22,6 +22,7 @@ mod switch;
 mod task;
 
 use crate::loader::get_app_data_by_name;
+use crate::config::{MAX_SYSCALL_NUM};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -114,4 +115,44 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// increase_syscall_times
+pub fn increase_syscall_times(sys_id: usize) {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .increase_syscall_times(sys_id)
+}
+
+/// get_syscall_times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_syscall_times()
+}
+
+/// get_syscall_begin
+pub fn get_syscall_begin() -> usize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_syscall_begin()
+}
+
+/// task_alloc_mmap
+pub fn task_alloc_mmap(start: usize, len: usize, port: usize) -> isize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .mmap(start, len, port)
+}
+
+/// task_alloc_unmmap
+pub fn task_alloc_unmmap(start: usize, len: usize) -> isize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .unmmap(start, len)
 }
