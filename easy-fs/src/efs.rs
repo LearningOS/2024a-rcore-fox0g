@@ -148,4 +148,9 @@ impl EasyFileSystem {
             (block_id - self.data_area_start_block) as usize,
         )
     }
+
+    /// Allocate a data block
+    pub fn get_inode_area_start_block(&mut self) -> u32 {
+        self.inode_area_start_block
+    }
 }
