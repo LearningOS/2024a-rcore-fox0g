@@ -11,6 +11,7 @@ use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use crate::timer::{get_time_ms,};
 
 /// Processor management structure
 pub struct Processor {
@@ -61,6 +62,15 @@ pub fn run_tasks() {
             task_inner.task_status = TaskStatus::Running;
             // release coming task_inner manually
             drop(task_inner);
+
+            let process = task.process.upgrade().unwrap();
+            let mut process_inner = process.inner_exclusive_access();
+            // kaz:第一次运行task的时间
+            if process_inner.syscall_begin == 0 {
+                process_inner.syscall_begin = get_time_ms();
+            }
+            drop(process_inner);
+            
             // release coming task TCB manually
             processor.current = Some(task);
             // release processor manually

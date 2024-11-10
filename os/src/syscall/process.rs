@@ -5,7 +5,9 @@ use crate::{
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
+        get_syscall_times,get_syscall_begin,
     },
+    timer::{get_time_us,},
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -167,7 +169,15 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    let us = get_time_us();
+    let ts = translated_refmut(current_user_token(), _ts);
+    
+    *ts = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    
+    0
 }
 
 /// task_info syscall
@@ -180,7 +190,14 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    let ti = translated_refmut(current_user_token(), _ti);
+    *ti = TaskInfo {
+        status: TaskStatus::Running,
+        syscall_times: get_syscall_times(),
+        time: get_syscall_begin(),
+    };
+    
+    0
 }
 
 /// mmap syscall

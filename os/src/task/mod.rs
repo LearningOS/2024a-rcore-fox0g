@@ -38,6 +38,7 @@ pub use processor::{
 };
 pub use signal::SignalFlags;
 pub use task::{TaskControlBlock, TaskStatus};
+use crate::config::{MAX_SYSCALL_NUM};
 
 /// Make current task suspended and switch to the next task
 pub fn suspend_current_and_run_next() {
@@ -203,4 +204,25 @@ pub fn remove_inactive_task(task: Arc<TaskControlBlock>) {
     remove_task(Arc::clone(&task));
     trace!("kernel: remove_inactive_task .. remove_timer");
     remove_timer(Arc::clone(&task));
+}
+
+/// kaz:get_syscall_times
+pub fn get_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    current_process()
+        .inner_exclusive_access()
+        .get_syscall_times()
+}
+
+/// kaz:get_syscall_begin
+pub fn get_syscall_begin() -> usize {
+    current_process()
+        .inner_exclusive_access()
+        .get_syscall_begin()
+}
+
+/// kaz:increase_syscall_times
+pub fn increase_syscall_times(sys_id: usize) {
+    current_process()
+        .inner_exclusive_access()
+        .increase_syscall_times(sys_id)
 }

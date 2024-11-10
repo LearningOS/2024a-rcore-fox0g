@@ -14,6 +14,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use crate::config::{MAX_SYSCALL_NUM};
 
 /// Process Control Block
 pub struct ProcessControlBlock {
@@ -49,6 +50,16 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// m_available
+    pub m_available: Vec<usize>,
+    /// s_available
+    pub s_available: Vec<usize>,
+    /// use deadlock detection
+    pub use_dead_lock: bool,
+    /// kaz:syscall times
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    /// kaz:begen time
+    pub syscall_begin: usize,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +92,45 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+
+    /// increase m_available
+    pub fn adjust_m_available(&mut self, target_id: usize, num: usize) {
+        let desired_length = target_id + 1; // 指定的长度
+        if self.m_available.len() < desired_length {
+            self.m_available.resize(desired_length, 0);
+        }
+        self.m_available[target_id] += num;
+    }
+
+    /// increase s_available
+    pub fn adjust_s_available(&mut self, target_id: usize, num: usize) {
+        let desired_length = target_id + 1; // 指定的长度
+        if self.s_available.len() < desired_length {
+            self.s_available.resize(desired_length, 0);
+        }
+        self.s_available[target_id] += num;
+    }
+
+    /// kaz:get syscall times
+    pub fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        self.syscall_times.clone()
+    }
+
+    /// kaz:get time
+    pub fn get_syscall_begin(&self) -> usize {
+        self.syscall_begin
+    }
+
+    /// kaz:increase syscall times
+    pub fn increase_syscall_times(&mut self, syscall_id: usize) {
+        self.syscall_times[syscall_id] += 1;
+        if syscall_id == 64 {
+            debug!(
+                "increase sys_call_times of SYSCALL_WRITE:{}",
+                self.syscall_times[syscall_id]
+            );
+        }
     }
 }
 
@@ -119,6 +169,11 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    use_dead_lock: false,
+                    m_available: Vec::new(),
+                    s_available: Vec::new(),
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    syscall_begin: 0,
                 })
             },
         });
@@ -245,6 +300,11 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    use_dead_lock: parent.use_dead_lock,
+                    m_available: parent.m_available.clone(),
+                    s_available: parent.s_available.clone(),
+                    syscall_times: parent.syscall_times.clone(),
+                    syscall_begin: 0,
                 })
             },
         });
